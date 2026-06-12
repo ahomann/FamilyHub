@@ -1,6 +1,43 @@
-# Temporäre Dateien
+# Abhängigkeiten (nie ins Repo)
+node_modules/
+.pnp
+.pnp.js
+
+# Umgebungsvariablen und Secrets
+.env
+.env.local
+.env.*.local
+
+# Firebase Credentials (SICHERHEIT!)
+google-services.json
+GoogleService-Info.plist
+
+# Expo
+.expo/
+dist/
+web-build/
+
+# Build-Ausgaben
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Metro
+.metro-health-check*
+
+# macOS / Windows
 .DS_Store
 Thumbs.db
-
-# Windows
 desktop.ini
+
+# IDE
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
