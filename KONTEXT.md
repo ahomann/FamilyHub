@@ -82,13 +82,34 @@ FamilyHub/
 - GitHub-Repo: https://github.com/ahomann/FamilyHub.git
 - Repo liegt auf Project_Family_Wall-Ebene (inkl. KONTEXT.md + Dokumentation)
 
-### Normaler Push
+### Normaler Push (Arbeitsrechner)
 ```powershell
 cd C:\claude\Project_Family_Wall
 git add .
 git status   # prüfen: .env darf NICHT auftauchen
 git commit -m "Beschreibung der Änderung"
 git push
+```
+
+### Erstmaliges Klonen zuhause
+```powershell
+git clone https://github.com/ahomann/FamilyHub.git
+cd FamilyHub\FamilyHub
+npm install
+```
+Danach `.env` manuell anlegen (wird nie ins Repo committed):
+```
+EXPO_PUBLIC_FIREBASE_API_KEY=...
+EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN=...
+(etc.)
+```
+
+### Updates zuhause holen
+```powershell
+cd <Pfad>\FamilyHub
+git pull
+cd FamilyHub
+npm install   # nur nötig wenn package.json geändert wurde
 ```
 
 ### Repo neu aufsetzen (falls History kaputt)
@@ -107,6 +128,7 @@ git push -u origin main
 ### Wichtige Regeln
 - **Niemals** Tokens, Keys oder Passwörter in KONTEXT.md oder andere getrackte Dateien
 - Asana-Token, Firebase-Keys → nur in `.env` oder lokalem Memory
+- `node_modules/` und `.env` sind in `.gitignore` — werden nie committed
 - GitHub Push Protection blockiert Secrets automatisch → Commit mit `--amend` korrigieren, dann `--force` pushen
 
 ## Asana
