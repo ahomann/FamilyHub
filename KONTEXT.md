@@ -81,7 +81,33 @@ FamilyHub/
 - Git installiert (v2.54.0.windows.1)
 - GitHub-Repo: https://github.com/ahomann/FamilyHub.git
 - Repo liegt auf Project_Family_Wall-Ebene (inkl. KONTEXT.md + Dokumentation)
-- Push: `cd C:\claude\Project_Family_Wall && git add . && git commit -m "..." && git push`
+
+### Normaler Push
+```powershell
+cd C:\claude\Project_Family_Wall
+git add .
+git status   # prüfen: .env darf NICHT auftauchen
+git commit -m "Beschreibung der Änderung"
+git push
+```
+
+### Repo neu aufsetzen (falls History kaputt)
+```powershell
+cd C:\claude\Project_Family_Wall
+Remove-Item -Recurse -Force .git
+git init
+git branch -M main
+git add .
+git status   # prüfen: .env darf NICHT auftauchen
+git commit -m "Initial commit"
+git remote add origin https://github.com/ahomann/FamilyHub.git
+git push -u origin main
+```
+
+### Wichtige Regeln
+- **Niemals** Tokens, Keys oder Passwörter in KONTEXT.md oder andere getrackte Dateien
+- Asana-Token, Firebase-Keys → nur in `.env` oder lokalem Memory
+- GitHub Push Protection blockiert Secrets automatisch → Commit mit `--amend` korrigieren, dann `--force` pushen
 
 ## Asana
 - Token: siehe `reference_asana.md` in lokalem Memory (nie im Repo speichern)
