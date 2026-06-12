@@ -1,0 +1,157 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Hilfsfunktion: liest die familyId des aktuell eingeloggten Nutzers aus seinem User-Dokument
+    function userFamilyId() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.familyId;
+    }
+
+    // Hilfsfunktion: prüft ob der anfragende Nutzer Admin seiner Familie ist
+    function isAdmin() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin";
+    }
+
+    // Nutzerprofile: Lesen nur selbst oder innerhalb der gleichen Familie.
+    // Schreiben streng reglementiert um Rechteausweitung zu verhindern:
+    // niemand kann sich selbst zum Admin machen oder in fremde Familien eintragen.
+    match /users/{userId} {
+      allow read: if request.auth != null &&
+        (request.auth.uid == userId ||
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.familyId != null &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.familyId ==
+           resource.data.familyId);
+      // Neue Profile starten immer als "member" ohne Familie
+      allow create: if request.auth != null && request.auth.uid == userId &&
+        request.resource.data.role == "member" &&
+        request.resource.data.familyId == null;
+      allow update: if request.auth != null && (
+        // Selbst-Update in drei erlaubten Varianten:
+        (request.auth.uid == userId && (
+          // 1) Profilfelder ändern — Rolle und familyId bleiben unverändert
+          (request.resource.data.role == resource.data.role &&
+           request.resource.data.familyId == resource.data.familyId) ||
+          // 2) Familie beitreten — nur wenn man bereits in der members-Liste der Ziel-Familie steht
+          (resource.data.familyId == null &&
+           request.resource.data.role == resource.data.role &&
+           request.resource.data.familyId != null &&
+           get(/databases/$(database)/documents/families/$(request.resource.data.familyId)).data.members.hasAny([request.auth.uid])) ||
+          // 3) Familiengründer wird Admin seiner selbst erstellten Familie
+          (request.resource.data.role == "admin" &&
+           request.resource.data.familyId != null &&
+           get(/databases/$(database)/documents/families/$(request.resource.data.familyId)).data.createdBy == request.auth.uid)
+        )) ||
+        // Admin verwaltet Mitglieder der eigenen Familie — darf nur Rolle und familyId ändern
+        (isAdmin() && request.auth.uid != userId &&
+         userFamilyId() == resource.data.familyId &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role', 'familyId']))
+      );
+      allow delete: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Familien-Dokumente: Lesen nur für Mitglieder, kein list (Einladungscodes nicht auflistbar).
+    // Beitritt läuft über die inviteCodes-Collection — wer den Code kennt, erfährt die familyId.
+    match /families/{familyId} {
+      allow get: if request.auth != null && resource.data.members.hasAny([request.auth.uid]);
+      allow list: if false;
+      allow create: if request.auth != null &&
+        request.resource.data.createdBy == request.auth.uid &&
+        request.resource.data.members == [request.auth.uid];
+      allow update: if request.auth != null && (
+        // Mitglieder dürfen das eigene Familien-Dokument ändern
+        resource.data.members.hasAny([request.auth.uid]) ||
+        // Beitritt: Nutzer ohne Familie darf ausschließlich sich selbst zur members-Liste hinzufügen
+        (userFamilyId() == null &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members']) &&
+         request.resource.data.members.hasAll(resource.data.members) &&
+         request.resource.data.members.removeAll(resource.data.members) == [request.auth.uid])
+      );
+      allow delete: if request.auth != null && isAdmin() &&
+        resource.data.members.hasAny([request.auth.uid]);
+    }
+
+    // Einladungscode-Index: Code als Dokument-ID, Inhalt nur die familyId.
+    // Nur get (kein list) — wer den Code kennt darf nachschlagen, niemand kann Codes auflisten.
+    match /inviteCodes/{code} {
+      allow get: if request.auth != null;
+      allow list: if false;
+      // Anlegen nur durch den Familiengründer oder einen Admin der betreffenden Familie
+      allow create: if request.auth != null && (
+        get(/databases/$(database)/documents/families/$(request.resource.data.familyId)).data.createdBy == request.auth.uid ||
+        (isAdmin() && userFamilyId() == request.resource.data.familyId)
+      );
+      allow update: if false;
+      allow delete: if request.auth != null && isAdmin() &&
+        userFamilyId() == resource.data.familyId;
+    }
+
+    // Einkaufslisten: nur Mitglieder der gleichen Familie dürfen lesen und schreiben
+    match /shoppingLists/{listId} {
+      allow read: if request.auth != null && resource.data.familyId == userFamilyId();
+      allow create: if request.auth != null && request.resource.data.familyId == userFamilyId();
+      allow update, delete: if request.auth != null && resource.data.familyId == userFamilyId();
+    }
+
+    // Essenspläne: nur Mitglieder der gleichen Familie dürfen lesen und schreiben
+    match /mealPlans/{planId} {
+      allow read: if request.auth != null && resource.data.familyId == userFamilyId();
+      allow create: if request.auth != null && request.resource.data.familyId == userFamilyId();
+      allow update, delete: if request.auth != null && resource.data.familyId == userFamilyId();
+    }
+
+    // Geburtstage: nur Mitglieder der gleichen Familie dürfen lesen und schreiben
+    match /birthdays/{birthdayId} {
+      allow read: if request.auth != null && resource.data.familyId == userFamilyId();
+      allow create: if request.auth != null && request.resource.data.familyId == userFamilyId();
+      allow update, delete: if request.auth != null && resource.data.familyId == userFamilyId();
+    }
+
+    // Rezepte: nur Mitglieder der gleichen Familie dürfen lesen und schreiben
+    match /recipes/{recipeId} {
+      allow read: if request.auth != null && resource.data.familyId == userFamilyId();
+      allow create: if request.auth != null && request.resource.data.familyId == userFamilyId();
+      allow update, delete: if request.auth != null && resource.data.familyId == userFamilyId();
+    }
+
+    // Gesundheitsziele: nur der Nutzer selbst darf seine eigenen Zielwerte lesen und schreiben
+    match /healthTargets/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Blutdruck-Einträge: Zugriff nur auf eigene Einträge (userId-Prüfung)
+    match /bloodPressure/{entryId} {
+      allow read, update, delete: if request.auth != null && request.auth.uid == resource.data.userId;
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.userId;
+    }
+
+    // Diabetes-Tagebuch: Zugriff nur auf eigene Einträge (userId-Prüfung)
+    match /diabetesDiary/{entryId} {
+      allow read, update, delete: if request.auth != null && request.auth.uid == resource.data.userId;
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.userId;
+    }
+
+    // SOS-Notfallmeldungen: Erstellen nur als eigener Nutzer, Lesen/Aktualisieren nur für Familienmitglieder
+    match /sosAlerts/{alertId} {
+      // create nur als eigener Nutzer UND nur für die eigene Familie
+      allow create: if request.auth != null &&
+        request.auth.uid == request.resource.data.userId &&
+        request.resource.data.familyId == userFamilyId();
+      allow read, update: if request.auth != null &&
+        resource.data.familyId == userFamilyId();
+      allow delete: if false;
+    }
+
+    // Benutzernamen-Index: öffentlich lesbar (für Login per Benutzername vor Authentifizierung nötig)
+    // Schreiben nur als eigener Nutzer, Löschen nur vom Eigentümer
+    match /usernames/{username} {
+      // Nur get, kein list — einzelne Namen sind prüfbar (Login/Verfügbarkeit),
+      // aber die Collection kann nicht ausgelesen werden (Schutz der E-Mail-Adressen)
+      allow get: if true;
+      allow list: if false;
+      allow create: if request.auth != null && request.resource.data.uid == request.auth.uid;
+      allow update: if request.auth != null && resource.data.uid == request.auth.uid;
+      allow delete: if request.auth != null && resource.data.uid == request.auth.uid;
+    }
+
+  }
+}
