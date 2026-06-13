@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  TextInput, Modal, KeyboardAvoidingView, FlatList, Alert, ScrollView,
+  TextInput, Modal, KeyboardAvoidingView, FlatList, ScrollView,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
@@ -12,12 +12,10 @@ import { db } from "../../config/firebase";
 import { useAuthStore } from "../../store/authStore";
 import { z } from "zod";
 
-// Validierung für Artikel
 const itemSchema = z.object({
   name: z.string().min(1, "Artikel erforderlich").max(100, "Artikel zu lang"),
 });
 
-// Datenstrukturen
 interface ShoppingItem {
   id: string;
   name: string;
@@ -50,6 +48,7 @@ export default function ShoppingScreen() {
   const [suggestions, setSuggestions] = useState<SavedArticle[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [managingArticles, setManagingArticles] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   // Abonniere die aktuelle Einkaufsliste — Real-time Sync mit Firestore
   useEffect(() => {
@@ -61,9 +60,9 @@ export default function ShoppingScreen() {
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const lists = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
+      const lists = snapshot.docs.map((d) => ({
+        id: d.id,
+        ...d.data(),
       })) as ShoppingList[];
 
       if (lists.length === 0) {
@@ -86,9 +85,9 @@ export default function ShoppingScreen() {
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const articles = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
+      const articles = snapshot.docs.map((d) => ({
+        id: d.id,
+        ...d.data(),
       })) as SavedArticle[];
 
       setSavedArticles(articles);
@@ -97,7 +96,6 @@ export default function ShoppingScreen() {
     return () => unsubscribe();
   }, [familyId]);
 
-  // Erstelle die Standard-Einkaufsliste beim ersten Mal
   const createDefaultList = async () => {
     try {
       const docRef = await addDoc(collection(db, "shoppingLists"), {
@@ -119,7 +117,6 @@ export default function ShoppingScreen() {
     }
   };
 
-  // Filtere Vorschläge basierend auf Eingabe
   const handleTextChange = (text: string) => {
     setNewItemName(text);
 
@@ -135,13 +132,11 @@ export default function ShoppingScreen() {
     }
   };
 
-  // Wähle einen Vorschlag
   const selectSuggestion = (articleName: string) => {
     setNewItemName(articleName);
     setShowSuggestions(false);
   };
 
-  // Füge Artikel hinzu und speichere in History
   const addItem = async () => {
     if (!currentList) return;
 
@@ -176,20 +171,17 @@ export default function ShoppingScreen() {
     }
   };
 
-  // Abhaken = automatisch löschen (Artikel verschwindet sofort)
+  // Abhaken = sofort löschen
   const markItemAsChecked = async (itemId: string) => {
     if (!currentList) return;
 
     try {
       const updatedItems = currentList.items.filter((item) => item.id !== itemId);
 
-      await updateDoc(doc(db, "shoppingLists", currentList.id), {
-        items: updatedItems,
-      });
+      // Lokalen State sofort aktualisieren für besseres UX
+      setCurrentList({ ...currentList, items: updatedItems });
 
-      // Lokale State auch sofort aktualisieren für besseres UX
-      setCurrentList({
-        ...currentList,
+      await updateDoc(doc(db, "shoppingLists", currentList.id), {
         items: updatedItems,
       });
     } catch (error) {
@@ -197,10 +189,10 @@ export default function ShoppingScreen() {
     }
   };
 
-  // Lösche einen gespeicherten Artikel
   const deleteSavedArticle = async (articleId: string) => {
     try {
       await deleteDoc(doc(db, "shoppingHistory", articleId));
+      setConfirmDeleteId(null);
     } catch (error) {
       console.error("Fehler beim Löschen:", error);
     }
@@ -224,7 +216,6 @@ export default function ShoppingScreen() {
       </View>
 
       {managingArticles ? (
-        // Verwaltungsansicht für gespeicherte Artikel
         <View style={styles.managementContainer}>
           <Text style={styles.managementTitle}>Gespeicherte Artikel</Text>
           <FlatList
@@ -233,24 +224,20 @@ export default function ShoppingScreen() {
             renderItem={({ item }) => (
               <View style={styles.savedArticleRow}>
                 <Text style={styles.savedArticleName}>{item.name}</Text>
-                <TouchableOpacity
-                  onPress={() => {
-                    Alert.alert(
-                      "Löschen?",
-                      `"${item.name}" aus der Historie entfernen?`,
-                      [
-                        { text: "Abbrechen", style: "cancel" },
-                        {
-                          text: "Löschen",
-                          style: "destructive",
-                          onPress: () => deleteSavedArticle(item.id),
-                        },
-                      ]
-                    );
-                  }}
-                >
-                  <Text style={styles.deleteIcon}>✕</Text>
-                </TouchableOpacity>
+                {confirmDeleteId === item.id ? (
+                  <View style={styles.confirmRow}>
+                    <TouchableOpacity onPress={() => setConfirmDeleteId(null)} style={styles.confirmNo}>
+                      <Text style={styles.confirmNoText}>Nein</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => deleteSavedArticle(item.id)} style={styles.confirmYes}>
+                      <Text style={styles.confirmYesText}>Löschen</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <TouchableOpacity onPress={() => setConfirmDeleteId(item.id)}>
+                    <Text style={styles.deleteIcon}>✕</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             )}
             ListEmptyComponent={
@@ -273,24 +260,19 @@ export default function ShoppingScreen() {
               <TouchableOpacity
                 style={styles.itemRow}
                 activeOpacity={0.7}
-                onPress={() => {
-                  markItemAsChecked(item.id);
-                }}
+                onPress={() => markItemAsChecked(item.id)}
               >
-                <View style={styles.bulletContainer}>
-                  <Text style={styles.bulletHollow}>○</Text>
-                </View>
+                <Text style={styles.bulletHollow}>○</Text>
                 <Text style={styles.itemName}>{item.name}</Text>
               </TouchableOpacity>
             )}
             ListEmptyComponent={
               <View style={styles.emptyState}>
                 <Text style={styles.emptyText}>Keine Artikel auf der Liste</Text>
-                <Text style={styles.emptySubtext}>Tippe + um Artikel hinzuzufügen</Text>
+                <Text style={styles.emptySubtext}>Tippe + Artikel um etwas hinzuzufügen</Text>
               </View>
             }
             style={styles.itemsList}
-            scrollEnabled={true}
           />
 
           <TouchableOpacity
@@ -302,7 +284,6 @@ export default function ShoppingScreen() {
         </>
       )}
 
-      {/* Modal für neuen Artikel mit Autocomplete */}
       <Modal
         transparent
         animationType="slide"
@@ -312,15 +293,8 @@ export default function ShoppingScreen() {
           setShowSuggestions(false);
         }}
       >
-        <KeyboardAvoidingView
-          behavior="padding"
-          style={styles.modalContainer}
-        >
-          <ScrollView
-            style={styles.modalContent}
-            scrollEnabled={true}
-            keyboardShouldPersistTaps="handled"
-          >
+        <KeyboardAvoidingView behavior="padding" style={styles.modalContainer}>
+          <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Neuer Artikel</Text>
 
             <TextInput
@@ -330,24 +304,22 @@ export default function ShoppingScreen() {
               onChangeText={handleTextChange}
               placeholderTextColor="#A0AEC0"
               autoFocus
+              returnKeyType="done"
+              onSubmitEditing={addItem}
             />
 
-            {/* Autocomplete Suggestions - scrollbar if many */}
             {showSuggestions && suggestions.length > 0 && (
-              <FlatList
-                data={suggestions}
-                keyExtractor={(item) => item.id}
-                scrollEnabled={false}
-                renderItem={({ item }) => (
+              <View style={styles.suggestionsBox}>
+                {suggestions.map((item) => (
                   <TouchableOpacity
+                    key={item.id}
                     style={styles.suggestionItem}
                     onPress={() => selectSuggestion(item.name)}
                   >
                     <Text style={styles.suggestionText}>{item.name}</Text>
                   </TouchableOpacity>
-                )}
-                style={styles.suggestionsBox}
-              />
+                ))}
+              </View>
             )}
 
             <View style={styles.modalButtons}>
@@ -363,13 +335,13 @@ export default function ShoppingScreen() {
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.button, styles.addButton2]}
+                style={[styles.button, styles.confirmButton]}
                 onPress={addItem}
               >
-                <Text style={styles.addButtonText2}>Hinzufügen</Text>
+                <Text style={styles.confirmButtonText}>Hinzufügen</Text>
               </TouchableOpacity>
             </View>
-          </ScrollView>
+          </View>
         </KeyboardAvoidingView>
       </Modal>
     </View>
@@ -429,6 +401,32 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: "#FC8181",
   },
+  confirmRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  confirmNo: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+    backgroundColor: "#EDF2F7",
+  },
+  confirmNoText: {
+    fontSize: 13,
+    color: "#4A5568",
+    fontWeight: "500",
+  },
+  confirmYes: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+    backgroundColor: "#FC8181",
+  },
+  confirmYesText: {
+    fontSize: 13,
+    color: "white",
+    fontWeight: "600",
+  },
   noSavedText: {
     fontSize: 14,
     color: "#A0AEC0",
@@ -468,15 +466,11 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 1,
   },
-  bulletContainer: {
-    marginRight: 12,
-    width: 28,
-    alignItems: "center",
-  },
   bulletHollow: {
     fontSize: 22,
     color: "#2D3748",
-    fontWeight: "bold",
+    marginRight: 12,
+    lineHeight: 26,
   },
   itemName: {
     flex: 1,
@@ -550,6 +544,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginBottom: 16,
     maxHeight: 150,
+    overflow: "hidden",
   },
   suggestionItem: {
     paddingVertical: 10,
@@ -580,156 +575,10 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#4A5568",
   },
-  addButton2: {
+  confirmButton: {
     backgroundColor: "#4FD1C5",
   },
-  addButtonText2: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "white",
-  },
-  loadingText: {
-    flex: 1,
-    textAlignVertical: "center",
-    textAlign: "center",
-    fontSize: 16,
-    color: "#A0AEC0",
-  },
-  container: {
-    flex: 1,
-    backgroundColor: "#F7FAFC",
-  },
-  header: {
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#E2E8F0",
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#2D3748",
-  },
-  itemsList: {
-    flex: 1,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  itemRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "white",
-    paddingVertical: 16,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    marginBottom: 10,
-    borderLeftWidth: 4,
-    borderLeftColor: "#4FD1C5",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  bulletPoint: {
-    fontSize: 28,
-    fontWeight: "bold",
-    color: "#4FD1C5",
-    marginRight: 12,
-    lineHeight: 24,
-  },
-  itemName: {
-    flex: 1,
-    fontSize: 16,
-    color: "#2D3748",
-    fontWeight: "500",
-  },
-  tapHint: {
-    fontSize: 11,
-    color: "#A0AEC0",
-    marginLeft: 8,
-  },
-  emptyState: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingVertical: 60,
-  },
-  emptyText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#718096",
-    marginBottom: 8,
-  },
-  emptySubtext: {
-    fontSize: 13,
-    color: "#A0AEC0",
-  },
-  addButton: {
-    backgroundColor: "#4FD1C5",
-    marginHorizontal: 16,
-    marginBottom: 20,
-    paddingVertical: 14,
-    borderRadius: 8,
-    alignItems: "center",
-  },
-  addButtonText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "white",
-  },
-  modalContainer: {
-    flex: 1,
-    justifyContent: "flex-end",
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-  },
-  modalContent: {
-    backgroundColor: "white",
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 30,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#2D3748",
-    marginBottom: 16,
-  },
-  input: {
-    backgroundColor: "#F7FAFC",
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    fontSize: 15,
-    color: "#2D3748",
-    marginBottom: 16,
-  },
-  modalButtons: {
-    flexDirection: "row",
-    gap: 12,
-  },
-  button: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: "center",
-  },
-  cancelButton: {
-    backgroundColor: "#EDF2F7",
-  },
-  cancelButtonText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#4A5568",
-  },
-  addButton2: {
-    backgroundColor: "#4FD1C5",
-  },
-  addButtonText2: {
+  confirmButtonText: {
     fontSize: 14,
     fontWeight: "600",
     color: "white",

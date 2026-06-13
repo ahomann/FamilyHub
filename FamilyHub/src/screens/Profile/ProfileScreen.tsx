@@ -390,6 +390,8 @@ export default function ProfileScreen() {
               autoCapitalize="none"
               autoCorrect={false}
               autoFocus
+              returnKeyType="done"
+              onSubmitEditing={handleSaveUsername}
             />
             <Text style={styles.inputHint}>Buchstaben, Zahlen, _ und - erlaubt</Text>
             {usernameError ? <Text style={styles.modalError}>{usernameError}</Text> : null}
@@ -417,6 +419,8 @@ export default function ProfileScreen() {
               placeholder="Neuer Familienname"
               autoCapitalize="words"
               autoFocus
+              returnKeyType="done"
+              onSubmitEditing={handleRename}
             />
             {renameError ? <Text style={styles.modalError}>{renameError}</Text> : null}
             <View style={styles.modalButtons}>

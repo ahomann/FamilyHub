@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
-  TextInput, Modal, Alert, KeyboardAvoidingView, Platform,
+  TextInput, Modal, Alert, KeyboardAvoidingView, Platform, type TextInput as TI,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { collection, addDoc, onSnapshot, deleteDoc, doc, query, orderBy, where } from "firebase/firestore";
@@ -41,6 +41,9 @@ export default function BirthdayScreen() {
   const [month, setMonth] = useState("");
   const [year, setYear] = useState("");
   const [relation, setRelation] = useState("");
+
+  const refRelation = useRef<TI>(null);
+  const refYear = useRef<TI>(null);
 
   // Wird ausgeführt wenn familyId verfügbar ist: abonniert Echtzeit-Updates der Geburtstage aus Firestore
   useEffect(() => {
@@ -147,13 +150,13 @@ export default function BirthdayScreen() {
           <View style={styles.modalOverlay}>
             <View style={[styles.modalBox, { paddingBottom: insets.bottom + 24 }]}>
               <Text style={styles.modalTitle}>Geburtstag hinzufügen</Text>
-              <TextInput style={styles.input} placeholder="Name" value={name} onChangeText={setName} autoCapitalize="words" returnKeyType="next" />
-              <TextInput style={styles.input} placeholder="Beziehung (z.B. Mama, Bruder)" value={relation} onChangeText={setRelation} returnKeyType="next" />
+              <TextInput style={styles.input} placeholder="Name" value={name} onChangeText={setName} autoCapitalize="words" returnKeyType="next" onSubmitEditing={() => refRelation.current?.focus()} autoFocus />
+              <TextInput ref={refRelation} style={styles.input} placeholder="Beziehung (z.B. Mama, Bruder)" value={relation} onChangeText={setRelation} returnKeyType="next" onSubmitEditing={() => refYear.current?.focus()} />
               {/* Datum-Eingabe aufgeteilt in Tag, Monat und Jahr */}
               <View style={styles.dateRow}>
                 <TextInput style={[styles.input, styles.dateField]} placeholder="TT" value={day} onChangeText={setDay} keyboardType="number-pad" maxLength={2} />
                 <TextInput style={[styles.input, styles.dateField]} placeholder="MM" value={month} onChangeText={setMonth} keyboardType="number-pad" maxLength={2} />
-                <TextInput style={[styles.input, styles.dateFieldYear]} placeholder="JJJJ" value={year} onChangeText={setYear} keyboardType="number-pad" maxLength={4} />
+                <TextInput ref={refYear} style={[styles.input, styles.dateFieldYear]} placeholder="JJJJ" value={year} onChangeText={setYear} keyboardType="number-pad" maxLength={4} returnKeyType="done" onSubmitEditing={handleAdd} />
               </View>
               <TouchableOpacity style={styles.saveButton} onPress={handleAdd} activeOpacity={0.8}>
                 <Text style={styles.saveButtonText}>Speichern</Text>

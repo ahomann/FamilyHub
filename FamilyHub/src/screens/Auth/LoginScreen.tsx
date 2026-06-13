@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView,
+  ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, type TextInput as TI,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, deleteUser } from "firebase/auth";
@@ -58,6 +58,10 @@ export default function LoginScreen() {
   const [remainingSeconds, setRemainingSeconds] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const { setUser, setFamilyId } = useAuthStore();
+
+  const refUsername = useRef<TI>(null);
+  const refEmail = useRef<TI>(null);
+  const refPassword = useRef<TI>(null);
 
   // Registrierungs-Schritt 2: Familien-Auswahl
   const [familyChoice, setFamilyChoice] = useState<null | "code" | "new">(null);
@@ -347,6 +351,7 @@ export default function LoginScreen() {
               returnKeyType="next"
             />
             <TextInput
+              ref={refUsername}
               style={[styles.input, isLocked && styles.inputDisabled]}
               placeholder="Benutzername (z.B. max_mustermann)"
               value={username}
@@ -354,10 +359,12 @@ export default function LoginScreen() {
               autoCapitalize="none"
               autoCorrect={false}
               returnKeyType="next"
+              onSubmitEditing={() => refEmail.current?.focus()}
               editable={!isLocked}
             />
             <Text style={styles.inputHint}>Buchstaben, Zahlen, _ und - erlaubt</Text>
             <TextInput
+              ref={refEmail}
               style={[styles.input, isLocked && styles.inputDisabled]}
               placeholder="E-Mail-Adresse"
               value={email}
@@ -366,6 +373,7 @@ export default function LoginScreen() {
               autoCapitalize="none"
               autoCorrect={false}
               returnKeyType="next"
+              onSubmitEditing={() => refPassword.current?.focus()}
               editable={!isLocked}
             />
           </>
@@ -381,18 +389,20 @@ export default function LoginScreen() {
             autoCapitalize="none"
             autoCorrect={false}
             returnKeyType="next"
+            onSubmitEditing={() => refPassword.current?.focus()}
             editable={!isLocked}
           />
         )}
 
         <TextInput
+          ref={refPassword}
           style={[styles.input, isLocked && styles.inputDisabled]}
           placeholder="Passwort"
           value={password}
           onChangeText={setPassword}
           secureTextEntry
           returnKeyType="done"
-          onSubmitEditing={!isRegister ? handleAuth : undefined}
+          onSubmitEditing={handleAuth}
           editable={!isLocked}
         />
 
