@@ -92,6 +92,13 @@ service cloud.firestore {
       allow update, delete: if request.auth != null && resource.data.familyId == userFamilyId();
     }
 
+    // Artikel-Historie für Autocomplete: nur Mitglieder der gleichen Familie dürfen lesen und schreiben
+    match /shoppingHistory/{articleId} {
+      allow read: if request.auth != null && resource.data.familyId == userFamilyId();
+      allow create: if request.auth != null && request.resource.data.familyId == userFamilyId();
+      allow delete: if request.auth != null && resource.data.familyId == userFamilyId();
+    }
+
     // Essenspläne: nur Mitglieder der gleichen Familie dürfen lesen und schreiben
     match /mealPlans/{planId} {
       allow read: if request.auth != null && resource.data.familyId == userFamilyId();
