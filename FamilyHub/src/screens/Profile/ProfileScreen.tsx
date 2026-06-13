@@ -4,7 +4,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { signOut, deleteUser, reauthenticateWithCredential, EmailAuthProvider } from "firebase/auth";
-import { doc, getDoc, setDoc, deleteDoc, collection, query, where, getDocs, updateDoc, arrayRemove } from "firebase/firestore";
+import { doc, getDoc, setDoc, deleteDoc, collection, query, where, getDocs, updateDoc, arrayRemove, writeBatch } from "firebase/firestore";
 import { auth, db } from "../../config/firebase";
 import { useAuthStore } from "../../store/authStore";
 
@@ -215,6 +215,18 @@ export default function ProfileScreen() {
       }
       // Nutzerprofil löschen
       await deleteDoc(doc(db, "users", user.uid));
+
+      // Persönliche Gesundheitsdaten löschen (Batch für Effizienz)
+      const batch = writeBatch(db);
+      batch.delete(doc(db, "healthTargets", user.uid));
+      const [bpSnap, ddSnap] = await Promise.all([
+        getDocs(query(collection(db, "bloodPressure"), where("userId", "==", user.uid))),
+        getDocs(query(collection(db, "diabetesDiary"), where("userId", "==", user.uid))),
+      ]);
+      bpSnap.forEach((d) => batch.delete(d.ref));
+      ddSnap.forEach((d) => batch.delete(d.ref));
+      await batch.commit();
+
       // Firebase Auth Account löschen
       await deleteUser(auth.currentUser);
 
