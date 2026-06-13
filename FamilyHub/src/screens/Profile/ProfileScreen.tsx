@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity, Modal, ScrollView, ActivityIndicator, TextInput,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { signOut } from "firebase/auth";
+import { signOut, deleteUser, reauthenticateWithCredential, EmailAuthProvider } from "firebase/auth";
 import { doc, getDoc, setDoc, deleteDoc, collection, query, where, getDocs, updateDoc, arrayRemove } from "firebase/firestore";
 import { auth, db } from "../../config/firebase";
 import { useAuthStore } from "../../store/authStore";
@@ -36,6 +36,10 @@ export default function ProfileScreen() {
 
   // Modals
   const [logoutModal, setLogoutModal] = useState(false);
+  const [deleteAccountModal, setDeleteAccountModal] = useState(false);
+  const [deletePassword, setDeletePassword] = useState("");
+  const [deletingAccount, setDeletingAccount] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
   const [promoteModal, setPromoteModal] = useState<Member | null>(null);
   const [promoting, setPromoting] = useState(false);
   const [removeModal, setRemoveModal] = useState<Member | null>(null);
@@ -190,6 +194,44 @@ export default function ProfileScreen() {
     setFamilyId(null);
   };
 
+  // Löscht das Konto vollständig: Auth + alle Firestore-Dokumente
+  const handleDeleteAccount = async () => {
+    if (!deletePassword) { setDeleteError("Bitte Passwort eingeben."); return; }
+    if (!auth.currentUser || !user) return;
+    setDeletingAccount(true);
+    setDeleteError("");
+    try {
+      // Erst Re-Authentifizierung — Firebase verlangt das vor Konto-Löschung
+      const credential = EmailAuthProvider.credential(user.email!, deletePassword);
+      await reauthenticateWithCredential(auth.currentUser, credential);
+
+      // Aus Familie entfernen
+      if (familyId) {
+        await updateDoc(doc(db, "families", familyId), { members: arrayRemove(user.uid) });
+      }
+      // Benutzernamen-Index löschen
+      if (user.username) {
+        try { await deleteDoc(doc(db, "usernames", user.username)); } catch {}
+      }
+      // Nutzerprofil löschen
+      await deleteDoc(doc(db, "users", user.uid));
+      // Firebase Auth Account löschen
+      await deleteUser(auth.currentUser);
+
+      setUser(null);
+      setFamilyId(null);
+    } catch (e: any) {
+      if (e.code === "auth/wrong-password" || e.code === "auth/invalid-credential") {
+        setDeleteError("Passwort ist falsch.");
+      } else {
+        setDeleteError("Fehler beim Löschen. Bitte erneut versuchen.");
+      }
+      if (__DEV__) console.error(e);
+    } finally {
+      setDeletingAccount(false);
+    }
+  };
+
   // Tab-Inhalte als separate Render-Funktionen
   const renderProfilTab = () => (
     <ScrollView showsVerticalScrollIndicator={false}>
@@ -232,6 +274,11 @@ export default function ProfileScreen() {
       {/* Abmelden */}
       <TouchableOpacity style={styles.logoutBtn} onPress={() => setLogoutModal(true)} activeOpacity={0.8}>
         <Text style={styles.logoutText}>Abmelden</Text>
+      </TouchableOpacity>
+
+      {/* Konto löschen */}
+      <TouchableOpacity style={styles.deleteAccountBtn} onPress={() => { setDeletePassword(""); setDeleteError(""); setDeleteAccountModal(true); }} activeOpacity={0.8}>
+        <Text style={styles.deleteAccountText}>Konto löschen</Text>
       </TouchableOpacity>
     </ScrollView>
   );
@@ -477,6 +524,37 @@ export default function ProfileScreen() {
         </View>
       </Modal>
 
+      {/* Modal: Konto löschen */}
+      <Modal visible={deleteAccountModal} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalBox}>
+            <Text style={styles.modalTitle}>Konto löschen?</Text>
+            <Text style={styles.modalText}>
+              Dein Konto, Benutzername und alle persönlichen Daten werden dauerhaft gelöscht. Diese Aktion kann nicht rückgängig gemacht werden.
+            </Text>
+            <TextInput
+              style={styles.modalInput}
+              value={deletePassword}
+              onChangeText={setDeletePassword}
+              placeholder="Passwort zur Bestätigung"
+              secureTextEntry
+              autoFocus
+              returnKeyType="done"
+              onSubmitEditing={handleDeleteAccount}
+            />
+            {deleteError ? <Text style={styles.modalError}>{deleteError}</Text> : null}
+            <View style={styles.modalButtons}>
+              <TouchableOpacity style={styles.modalCancel} onPress={() => setDeleteAccountModal(false)} activeOpacity={0.8}>
+                <Text style={styles.modalCancelText}>Abbrechen</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalDelete} onPress={handleDeleteAccount} disabled={deletingAccount} activeOpacity={0.8}>
+                {deletingAccount ? <ActivityIndicator color="#fff" /> : <Text style={styles.modalDeleteText}>Löschen</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* Modal: Abmelden */}
       <Modal visible={logoutModal} transparent animationType="fade">
         <View style={styles.modalOverlay}>
@@ -564,6 +642,10 @@ const styles = StyleSheet.create({
   // Abmelden
   logoutBtn: { backgroundColor: "#fff", borderWidth: 2, borderColor: "#E53E3E", borderRadius: 12, padding: 16, alignItems: "center", marginTop: 8 },
   logoutText: { color: "#E53E3E", fontSize: 16, fontWeight: "bold" },
+  deleteAccountBtn: { backgroundColor: "#fff", borderWidth: 1, borderColor: "#CBD5E0", borderRadius: 12, padding: 14, alignItems: "center", marginTop: 8 },
+  deleteAccountText: { color: "#A0AEC0", fontSize: 14, fontWeight: "600" },
+  modalDelete: { flex: 1, backgroundColor: "#E53E3E", borderRadius: 10, padding: 14, alignItems: "center" },
+  modalDeleteText: { color: "#fff", fontWeight: "bold", fontSize: 15 },
 
   // Modals
   modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center" },
