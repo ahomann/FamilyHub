@@ -261,10 +261,13 @@ export default function ShoppingScreen() {
             renderItem={({ item }) => (
               <TouchableOpacity
                 style={styles.itemRow}
-                onPress={() => markItemAsChecked(item.id)}
+                activeOpacity={0.7}
+                onPress={() => {
+                  markItemAsChecked(item.id);
+                }}
               >
                 <View style={styles.bulletContainer}>
-                  <Text style={styles.bulletOutline}>●</Text>
+                  <Text style={styles.bulletHollow}>○</Text>
                 </View>
                 <Text style={styles.itemName}>{item.name}</Text>
               </TouchableOpacity>
@@ -452,8 +455,8 @@ const styles = StyleSheet.create({
     width: 28,
     alignItems: "center",
   },
-  bulletOutline: {
-    fontSize: 20,
+  bulletHollow: {
+    fontSize: 22,
     color: "#2D3748",
     fontWeight: "bold",
   },
@@ -574,9 +577,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#A0AEC0",
   },
-});
-
-const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#F7FAFC",
