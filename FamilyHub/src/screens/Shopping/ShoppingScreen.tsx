@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  TextInput, Modal, KeyboardAvoidingView, FlatList, Alert,
+  TextInput, Modal, KeyboardAvoidingView, FlatList, Alert, ScrollView,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
@@ -180,10 +180,21 @@ export default function ShoppingScreen() {
   const markItemAsChecked = async (itemId: string) => {
     if (!currentList) return;
 
-    const updatedItems = currentList.items.filter((item) => item.id !== itemId);
-    await updateDoc(doc(db, "shoppingLists", currentList.id), {
-      items: updatedItems,
-    });
+    try {
+      const updatedItems = currentList.items.filter((item) => item.id !== itemId);
+
+      await updateDoc(doc(db, "shoppingLists", currentList.id), {
+        items: updatedItems,
+      });
+
+      // Lokale State auch sofort aktualisieren für besseres UX
+      setCurrentList({
+        ...currentList,
+        items: updatedItems,
+      });
+    } catch (error) {
+      console.error("Fehler beim Löschen:", error);
+    }
   };
 
   // Lösche einen gespeicherten Artikel
@@ -305,7 +316,11 @@ export default function ShoppingScreen() {
           behavior="padding"
           style={styles.modalContainer}
         >
-          <View style={styles.modalContent}>
+          <ScrollView
+            style={styles.modalContent}
+            scrollEnabled={true}
+            keyboardShouldPersistTaps="handled"
+          >
             <Text style={styles.modalTitle}>Neuer Artikel</Text>
 
             <TextInput
@@ -317,19 +332,22 @@ export default function ShoppingScreen() {
               autoFocus
             />
 
-            {/* Autocomplete Suggestions */}
+            {/* Autocomplete Suggestions - scrollbar if many */}
             {showSuggestions && suggestions.length > 0 && (
-              <View style={styles.suggestionsBox}>
-                {suggestions.map((article) => (
+              <FlatList
+                data={suggestions}
+                keyExtractor={(item) => item.id}
+                scrollEnabled={false}
+                renderItem={({ item }) => (
                   <TouchableOpacity
-                    key={article.id}
                     style={styles.suggestionItem}
-                    onPress={() => selectSuggestion(article.name)}
+                    onPress={() => selectSuggestion(item.name)}
                   >
-                    <Text style={styles.suggestionText}>{article.name}</Text>
+                    <Text style={styles.suggestionText}>{item.name}</Text>
                   </TouchableOpacity>
-                ))}
-              </View>
+                )}
+                style={styles.suggestionsBox}
+              />
             )}
 
             <View style={styles.modalButtons}>
@@ -351,7 +369,7 @@ export default function ShoppingScreen() {
                 <Text style={styles.addButtonText2}>Hinzufügen</Text>
               </TouchableOpacity>
             </View>
-          </View>
+          </ScrollView>
         </KeyboardAvoidingView>
       </Modal>
     </View>
