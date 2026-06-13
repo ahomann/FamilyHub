@@ -3,6 +3,7 @@ import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, type TextInput as TI,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, deleteUser } from "firebase/auth";
 import { doc, setDoc, getDoc, updateDoc, arrayUnion, collection, addDoc } from "firebase/firestore";
@@ -23,23 +24,23 @@ function generateInviteCode(): string {
   return Array.from({ length: 6 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
 }
 
-// Hilfsfunktionen für persistente Sperrung im localStorage
-const getLockData = (email: string): { attempts: number; lockedUntil: number | null } => {
+// Hilfsfunktionen für persistente Sperrung — AsyncStorage funktioniert auf Android und Web
+const getLockData = async (email: string): Promise<{ attempts: number; lockedUntil: number | null }> => {
   try {
-    const raw = localStorage.getItem(`${STORAGE_KEY}_${email.toLowerCase()}`);
+    const raw = await AsyncStorage.getItem(`${STORAGE_KEY}_${email.toLowerCase()}`);
     if (!raw) return { attempts: 0, lockedUntil: null };
     return JSON.parse(raw);
   } catch { return { attempts: 0, lockedUntil: null }; }
 };
 
-const setLockData = (email: string, attempts: number, lockedUntil: number | null) => {
+const setLockData = async (email: string, attempts: number, lockedUntil: number | null) => {
   try {
-    localStorage.setItem(`${STORAGE_KEY}_${email.toLowerCase()}`, JSON.stringify({ attempts, lockedUntil }));
+    await AsyncStorage.setItem(`${STORAGE_KEY}_${email.toLowerCase()}`, JSON.stringify({ attempts, lockedUntil }));
   } catch {}
 };
 
-const clearLockData = (email: string) => {
-  try { localStorage.removeItem(`${STORAGE_KEY}_${email.toLowerCase()}`); } catch {}
+const clearLockData = async (email: string) => {
+  try { await AsyncStorage.removeItem(`${STORAGE_KEY}_${email.toLowerCase()}`); } catch {}
 };
 
 // Login- und Registrierungsscreen — Login per E-Mail oder Benutzername möglich
@@ -72,24 +73,27 @@ export default function LoginScreen() {
   // Gespeicherte Sperrdaten laden wenn Identifier eingetippt wird
   useEffect(() => {
     if (!identifier) return;
-    const saved = getLockData(identifier);
-    if (saved.lockedUntil && Date.now() < saved.lockedUntil) {
-      setLockedUntil(saved.lockedUntil);
-      setFailedAttempts(saved.attempts);
-      setRemainingSeconds(Math.ceil((saved.lockedUntil - Date.now()) / 1000));
-      setErrorMsg(`Zu viele Fehlversuche. Anmeldung für ${LOCKOUT_MINUTES} Minuten gesperrt.`);
-    } else if (saved.lockedUntil && Date.now() >= saved.lockedUntil) {
-      clearLockData(identifier);
-      setFailedAttempts(0);
-      setLockedUntil(null);
-    } else if (saved.attempts > 0) {
-      setFailedAttempts(saved.attempts);
-      setErrorMsg(`Bitte erneut versuchen. (${saved.attempts}/${MAX_ATTEMPTS} Fehlversuche)`);
-    } else {
-      setFailedAttempts(0);
-      setLockedUntil(null);
-      setErrorMsg("");
-    }
+    const load = async () => {
+      const saved = await getLockData(identifier);
+      if (saved.lockedUntil && Date.now() < saved.lockedUntil) {
+        setLockedUntil(saved.lockedUntil);
+        setFailedAttempts(saved.attempts);
+        setRemainingSeconds(Math.ceil((saved.lockedUntil - Date.now()) / 1000));
+        setErrorMsg(`Zu viele Fehlversuche. Anmeldung für ${LOCKOUT_MINUTES} Minuten gesperrt.`);
+      } else if (saved.lockedUntil && Date.now() >= saved.lockedUntil) {
+        await clearLockData(identifier);
+        setFailedAttempts(0);
+        setLockedUntil(null);
+      } else if (saved.attempts > 0) {
+        setFailedAttempts(saved.attempts);
+        setErrorMsg(`Bitte erneut versuchen. (${saved.attempts}/${MAX_ATTEMPTS} Fehlversuche)`);
+      } else {
+        setFailedAttempts(0);
+        setLockedUntil(null);
+        setErrorMsg("");
+      }
+    };
+    load();
   }, [identifier]);
 
   // Countdown-Timer während der Sperrzeit
@@ -266,7 +270,7 @@ export default function LoginScreen() {
           setLoading(false);
           return;
         }
-        clearLockData(normalizedEmail);
+        await clearLockData(normalizedEmail);
         setFailedAttempts(0);
       } else {
         // Login: E-Mail oder Benutzername auflösen
@@ -291,7 +295,7 @@ export default function LoginScreen() {
           setUser(data as any);
           setFamilyId(data.familyId ?? null);
         }
-        clearLockData(input);
+        await clearLockData(input);
         setFailedAttempts(0);
       }
     } catch (e: any) {
@@ -300,12 +304,12 @@ export default function LoginScreen() {
       setFailedAttempts(newAttempts);
       if (newAttempts >= MAX_ATTEMPTS) {
         const until = Date.now() + LOCKOUT_MINUTES * 60 * 1000;
-        setLockData(identifier, newAttempts, until);
+        await setLockData(identifier, newAttempts, until);
         setLockedUntil(until);
         setRemainingSeconds(LOCKOUT_MINUTES * 60);
         setErrorMsg(`Zu viele Fehlversuche. Anmeldung für ${LOCKOUT_MINUTES} Minuten gesperrt.`);
       } else {
-        setLockData(identifier, newAttempts, null);
+        await setLockData(identifier, newAttempts, null);
         setErrorMsg(`${msg} (Versuch ${newAttempts}/${MAX_ATTEMPTS})`);
       }
     } finally {
