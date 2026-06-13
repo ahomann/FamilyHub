@@ -205,9 +205,35 @@ export default function ProfileScreen() {
       const credential = EmailAuthProvider.credential(user.email!, deletePassword);
       await reauthenticateWithCredential(auth.currentUser, credential);
 
-      // Aus Familie entfernen
+      // Familie prüfen — letztes Mitglied? Dann alle Familiendaten löschen
       if (familyId) {
-        await updateDoc(doc(db, "families", familyId), { members: arrayRemove(user.uid) });
+        const familySnap = await getDoc(doc(db, "families", familyId));
+        const members: string[] = familySnap.exists() ? (familySnap.data().members ?? []) : [];
+        const isLastMember = members.length <= 1;
+
+        if (isLastMember) {
+          // Alle Familiendaten in einem Batch löschen
+          const familyBatch = writeBatch(db);
+          const [listsSnap, historySnap, birthdaysSnap, mealSnap, recipesSnap] = await Promise.all([
+            getDocs(query(collection(db, "shoppingLists"), where("familyId", "==", familyId))),
+            getDocs(query(collection(db, "shoppingHistory"), where("familyId", "==", familyId))),
+            getDocs(query(collection(db, "birthdays"), where("familyId", "==", familyId))),
+            getDocs(query(collection(db, "mealPlans"), where("familyId", "==", familyId))),
+            getDocs(query(collection(db, "recipes"), where("familyId", "==", familyId))),
+          ]);
+          listsSnap.forEach((d) => familyBatch.delete(d.ref));
+          historySnap.forEach((d) => familyBatch.delete(d.ref));
+          birthdaysSnap.forEach((d) => familyBatch.delete(d.ref));
+          mealSnap.forEach((d) => familyBatch.delete(d.ref));
+          recipesSnap.forEach((d) => familyBatch.delete(d.ref));
+          // Einladungscode und Familie selbst löschen
+          const inviteCode = familySnap.data()?.inviteCode;
+          if (inviteCode) familyBatch.delete(doc(db, "inviteCodes", inviteCode));
+          familyBatch.delete(doc(db, "families", familyId));
+          await familyBatch.commit();
+        } else {
+          await updateDoc(doc(db, "families", familyId), { members: arrayRemove(user.uid) });
+        }
       }
       // Benutzernamen-Index löschen
       if (user.username) {
