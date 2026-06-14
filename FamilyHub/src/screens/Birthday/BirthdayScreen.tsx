@@ -10,6 +10,7 @@ import { useAuthStore } from "../../store/authStore";
 import { Birthday } from "../../types";
 import { format, differenceInDays, setYear, isBefore, addYears } from "date-fns";
 import { de } from "date-fns/locale";
+import { requestNotificationPermissions, scheduleBirthdayNotifications } from "../../utils/birthdayNotifications";
 
 // Berechnet die Anzahl der Tage bis zum nächsten Geburtstag (jährlich rollierend)
 function daysUntilBirthday(dateStr: string): number {
@@ -44,6 +45,18 @@ export default function BirthdayScreen() {
 
   const refRelation = useRef<TI>(null);
   const refYear = useRef<TI>(null);
+
+  // Einmalig beim Start: Benachrichtigungs-Berechtigung anfragen
+  useEffect(() => {
+    requestNotificationPermissions();
+  }, []);
+
+  // Benachrichtigungen neu planen sobald sich die Geburtstagsliste ändert
+  useEffect(() => {
+    if (birthdays.length > 0) {
+      scheduleBirthdayNotifications(birthdays);
+    }
+  }, [birthdays]);
 
   // Wird ausgeführt wenn familyId verfügbar ist: abonniert Echtzeit-Updates der Geburtstage aus Firestore
   useEffect(() => {

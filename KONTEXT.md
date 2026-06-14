@@ -1,20 +1,49 @@
-# FamilyHub — Kontext für neuen Chat (Stand 12.06.2026)
+# FamilyHub — Kontext für neuen Chat (Stand 14.06.2026)
 
 ## Wie weitermachen
-Im neuen Chat sagen: "Lies bitte C:\claude\Project_Family_Wall\KONTEXT.md und mach weiter"
+Im neuen Chat sagen: "Lies bitte C:\claude\FamilyHub\KONTEXT.md und mach weiter"
 
 ---
 
 ## Projekt
 React Native / Expo SDK 56 App "FamilyHub" für Familienverwaltung.
-**Pfad:** `C:\claude\Project_Family_Wall\FamilyHub`
+**Pfad:** `C:\claude\FamilyHub\FamilyHub`
 **Firebase Projekt-ID:** `family-hub-app-6d428`
 
 ## Permanente Regeln (IMMER einhalten)
 1. **Sicherheit:** .env für Firebase-Keys, Firestore-Regeln prüfen, keine Keys im Code
 2. **Kommentare:** Bei jeder Änderung deutsche Wartungskommentare einfügen (Funktionen, useEffects, JSX-Abschnitte) — niemals StyleSheet-Einträge kommentieren
 
-## Was heute fertig wurde (12.06.2026)
+## Testen
+- **Web-Browser (aktuell):** `npx expo start --web` → IP-Adresse im iPhone-Browser öffnen
+- **Expo Go:** Warten auf SDK 56 Update im App Store (aktuell Version 54.0.2 installiert)
+- **Tunnel (unterwegs):** `npx expo start --tunnel` (ngrok eingerichtet, Expo-Login: ahomann)
+- **EAS Build / App Store:** zurückgestellt — kein Apple Developer Account (99$/Jahr zu teuer)
+
+## Was heute fertig wurde (14.06.2026)
+
+### Firebase Rules & Infrastruktur
+- Firebase Rules in Firebase Console veröffentlicht (via Firebase CLI)
+- `firebase.json` und `.firebaserc` angelegt für künftige Deploys
+- Für bestehende Familie einmalig neuen Einladungscode generiert (inviteCodes-Index angelegt)
+
+### Geburtstags-Push-Benachrichtigungen
+- Neue Datei: `src/utils/birthdayNotifications.ts`
+- Berechtigung anfragen (Android: eigener Notification Channel)
+- Am Geburtstag um 9:00 Uhr — jährlich wiederkehrend
+- 7 Tage vorher um 9:00 Uhr — Erinnerung
+- Benachrichtigungen werden neu geplant wenn sich die Geburtstagsliste ändert
+- Web: automatisch deaktiviert (nicht unterstützt)
+
+### SOS-Screen mit GPS (komplett neu implementiert)
+- Großer roter SOS-Knopf mit Bestätigungsdialog
+- GPS-Standort via `expo-location` (Web: Browser Geolocation API)
+- Alert wird in Firestore gespeichert, alle Familienmitglieder sehen ihn in Echtzeit
+- "Standort anzeigen": iOS → Apple Maps, Android → Google Maps App, Web → Google Maps Browser
+- "Erledigt" Button schließt den Alert
+- Lokale Push-Benachrichtigung wenn anderes Familienmitglied SOS drückt (nur nativ, nicht Web)
+
+## Was früher fertig wurde (12.06.2026)
 
 ### Benutzername-System
 - Registrierung: Benutzername-Feld (Format: Buchstaben, Zahlen, _ und -, keine Längenbeschränkung)
@@ -45,16 +74,22 @@ React Native / Expo SDK 56 App "FamilyHub" für Familienverwaltung.
 ```
 FamilyHub/
   App.tsx                              ← onAuthStateChanged Listener
+  firebase.json                        ← Firebase CLI Konfiguration
+  .firebaserc                          ← Projekt-ID für Firebase CLI
   src/
     screens/Auth/LoginScreen.tsx       ← Login per E-Mail oder Benutzername, Registrierung
     screens/Family/FamilySetupScreen.tsx ← Familie erstellen/beitreten (nutzt inviteCodes-Index)
     screens/Profile/ProfileScreen.tsx  ← Tab-Navigation: Profil / Familie / Mitglieder
+    screens/Birthday/BirthdayScreen.tsx ← Geburtstage mit Push-Benachrichtigungen
+    screens/Shopping/ShoppingScreen.tsx ← Einkaufsliste mit Echtzeit-Sync
+    screens/SOS/SOSScreen.tsx          ← SOS-Notruf mit GPS und Google Maps
     screens/Health/HealthScreen.tsx
     navigation/AppNavigator.tsx
     store/authStore.ts                 ← Zustand: user, familyId, loading
     types/index.ts                     ← User-Interface hat jetzt username-Feld
     config/firebase.ts
-  firebase.rules/firestore.rules       ← MUSS manuell in Firebase Console deployed werden!
+    utils/birthdayNotifications.ts     ← Push-Benachrichtigungen für Geburtstage
+  firebase.rules/firestore.rules       ← MUSS via Firebase CLI deployed werden!
   .env                                 ← Firebase-Keys (nie committen)
 ```
 
@@ -63,28 +98,28 @@ FamilyHub/
 - `families/{randomId}` — name, inviteCode, members, createdBy
 - `inviteCodes/{code}` — { familyId } — Index für Beitritt per Code
 - `usernames/{username}` — { uid, email } — Index für Login per Benutzername
-- `shoppingLists`, `mealPlans`, `birthdays`, `recipes`, `healthTargets`, `bloodPressure`, `diabetesDiary`, `sosAlerts`
+- `shoppingLists`, `shoppingHistory`, `mealPlans`, `birthdays`, `recipes`
+- `healthTargets`, `bloodPressure`, `diabetesDiary`
+- `sosAlerts` — { userId, familyId, latitude, longitude, timestamp, resolved }
 
-## Firestore-Regeln
-**WICHTIG:** Nach jeder Regeländerung manuell in Firebase Console kopieren:
-→ console.firebase.google.com → Projekt family-hub-app-6d428 → Firestore → Regeln → Veröffentlichen
+## Firestore-Regeln deployen
+```powershell
+cd C:\claude\FamilyHub\FamilyHub
+firebase deploy --only firestore:rules
+```
 
-## Offene Punkte (Priorität)
-1. **SOFORT:** Firebase Rules in Firebase Console veröffentlichen (neue Regeln aus heute)
-2. **SOFORT:** Für bestehende Familie einmalig "Neuen Code generieren" drücken (inviteCodes-Index anlegen)
-3. EAS Build für iOS & Android einrichten (Asana-Task war fällig 13.06)
-4. Einkaufslisten mit Firestore Echtzeit-Sync (Phase 2)
-5. Geburtstags-Push-Benachrichtigungen
-6. SOS-Screen mit GPS
+## Offene Punkte
+1. Weitere Features nach Bedarf (Mahlzeitenplan, Rezepte, Gesundheit ausbauen)
+2. EAS Build — zurückgestellt bis Apple Developer Account vorhanden
 
 ## Git
 - Git installiert (v2.54.0.windows.1)
 - GitHub-Repo: https://github.com/ahomann/FamilyHub.git
-- Repo liegt auf Project_Family_Wall-Ebene (inkl. KONTEXT.md + Dokumentation)
+- Repo liegt auf FamilyHub-Ebene (inkl. KONTEXT.md + Dokumentation)
 
 ### Normaler Push (Arbeitsrechner)
 ```powershell
-cd C:\claude\Project_Family_Wall
+cd C:\claude\FamilyHub
 git add .
 git status   # prüfen: .env darf NICHT auftauchen
 git commit -m "Beschreibung der Änderung"
@@ -112,24 +147,11 @@ cd FamilyHub
 npm install   # nur nötig wenn package.json geändert wurde
 ```
 
-### Repo neu aufsetzen (falls History kaputt)
-```powershell
-cd C:\claude\Project_Family_Wall
-Remove-Item -Recurse -Force .git
-git init
-git branch -M main
-git add .
-git status   # prüfen: .env darf NICHT auftauchen
-git commit -m "Initial commit"
-git remote add origin https://github.com/ahomann/FamilyHub.git
-git push -u origin main
-```
-
 ### Wichtige Regeln
 - **Niemals** Tokens, Keys oder Passwörter in KONTEXT.md oder andere getrackte Dateien
 - Asana-Token, Firebase-Keys → nur in `.env` oder lokalem Memory
 - `node_modules/` und `.env` sind in `.gitignore` — werden nie committed
-- GitHub Push Protection blockiert Secrets automatisch → Commit mit `--amend` korrigieren, dann `--force` pushen
+- GitHub Push Protection blockiert Secrets automatisch
 
 ## Asana
 - Token: siehe `reference_asana.md` in lokalem Memory (nie im Repo speichern)
